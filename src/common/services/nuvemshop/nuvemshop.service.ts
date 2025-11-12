@@ -1,5 +1,8 @@
-// src/common/services/nuvemshop/nuvemshop.service.ts
-// Atualizado com categoryMap e cleanString do Express
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable prefer-const */
 import {
   Injectable,
   NotFoundException,
@@ -69,6 +72,7 @@ export interface CreateOrderPayload {
   shipping?: string;
   shipping_option?: string;
   shipping_cost_customer?: number;
+  payment_status?: string; // Adicionado para definir status de pagamento
 }
 
 @Injectable()
@@ -271,6 +275,7 @@ export class NuvemshopService {
       shipping_cost_customer: payload.shipping_cost_customer ?? 0,
       billing_address: { ...defaultAddress, ...payload.billing_address },
       shipping_address: { ...defaultAddress, ...payload.shipping_address },
+      payment_status: 'paid', // ADICIONADO: Marca como pago na criação
     };
 
     const response: AxiosResponse<unknown> = await this.api.post(

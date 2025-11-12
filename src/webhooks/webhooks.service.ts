@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 // src/webhooks/webhooks.service.ts
-// Novo: Lógica de webhooks.routes.js
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
@@ -24,7 +23,7 @@ export class WebhooksService {
   ) {
     const accessToken = this.configService.get<string>('MP_ACCESS_TOKEN');
     if (!accessToken) {
-      throw new Error('MP_ACCESS_TOKEN is not configured');
+      throw new Error('MP_ACCESS_TOKEN is not defined');
     }
     this.mp = new MercadoPagoConfig({ accessToken });
   }
@@ -45,7 +44,8 @@ export class WebhooksService {
     const query = req.query || {};
     const body = req.body || {};
 
-    const paymentId =
+    // eslint-disable-next-line prefer-const
+    let paymentId =
       query.id ||
       query['data.id'] ||
       body?.data?.id ||
@@ -143,13 +143,11 @@ export class WebhooksService {
       throw new UnauthorizedException('Assinatura inválida');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const { store_id } = JSON.parse(rawBody);
     console.log(`🧹 LGPD: Deletando dados da loja ${store_id}`);
   }
 
-  handleCustomersRedact(req: Request): void {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+  async handleCustomersRedact(req: Request): Promise<void> {
     const rawBody = req.body.toString('utf-8');
     const hmacHeader =
       (req.headers['x-linkedstore-hmac-sha256'] as string) ||
@@ -159,14 +157,13 @@ export class WebhooksService {
       throw new UnauthorizedException('Assinatura inválida');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const { store_id, customer, orders_to_redact } = JSON.parse(rawBody);
     console.log(
       `🧹 LGPD: Deletando dados do cliente ${customer?.id} da loja ${store_id}, pedidos: ${orders_to_redact}`,
     );
   }
 
-  handleCustomersDataRequest(req: Request): void {
+  async handleCustomersDataRequest(req: Request): Promise<void> {
     const rawBody = req.body.toString('utf-8');
     const hmacHeader =
       (req.headers['x-linkedstore-hmac-sha256'] as string) ||
