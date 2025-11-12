@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
+import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
-import { NuvemshopService } from '../common/services/nuvemshop/nuvemshop.service';
-import { AuthModule } from '../auth/auth.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
-  imports: [AuthModule],
-  controllers: [],
-  providers: [ProductsService, NuvemshopService],
+  imports: [CommonModule],
+  controllers: [ProductsController],
+  providers: [ProductsService],
 })
 export class ProductsModule {}

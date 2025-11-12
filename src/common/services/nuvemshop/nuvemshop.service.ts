@@ -1,3 +1,5 @@
+// src/common/services/nuvemshop/nuvemshop.service.ts
+// Atualizado com categoryMap e cleanString do Express
 import {
   Injectable,
   NotFoundException,
@@ -6,7 +8,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import { AuthService } from '../../../auth/auth.service';
-import { IListProduct } from '../../../products/products.service';
 
 interface CategoryName {
   pt: string;
@@ -16,8 +17,13 @@ interface Category {
   name: CategoryName;
 }
 
+interface VariantValue {
+  pt: string;
+}
+
 interface Variant {
   price: string;
+  values: VariantValue[];
 }
 
 export interface Product {
@@ -25,7 +31,6 @@ export interface Product {
   categories?: Category[];
   region?: string;
   variants?: Variant[];
-  // Additional fields can be added as per API response
 }
 
 interface Customer {
@@ -64,12 +69,26 @@ export interface CreateOrderPayload {
   shipping?: string;
   shipping_option?: string;
   shipping_cost_customer?: number;
-  // Add more optional fields as needed
 }
 
 @Injectable()
 export class NuvemshopService {
   private readonly api: AxiosInstance;
+  private readonly categoryMap: Record<string, number> = {
+    tinto: 31974513,
+    branco: 31974513,
+    rose: 31974513,
+    rosé: 31974513,
+    amana: 31974539,
+    una: 31974540,
+    singular: 32613020,
+    cafe: 31974516,
+    'em grao': 31974553,
+    'em po': 31974549,
+    diversos: 31974526,
+    experiencias: 31974528,
+    'vale-presente': 31974530,
+  };
 
   constructor(
     private readonly authService: AuthService,
@@ -112,21 +131,69 @@ export class NuvemshopService {
     );
   }
 
-  async fetchProducts(params: IListProduct): Promise<Product[]> {
-    const response: AxiosResponse<Product[]> = await this.api.get('/products', {
-      params,
-    });
-    return response.data;
+  private cleanString(str: string): string {
+    return str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
   }
 
-  async fetchProductById(id: string): Promise<Product | null> {
-    try {
-      const response: AxiosResponse<Product> = await this.api.get(
-        `/products/${id}`,
+  async fetchProducts(query: {
+    page?: number;
+    per_page?: number;
+    published?: boolean;
+    category?: string;
+    search?: string;
+  }): Promise<Product[]> {
+    let params: any = {
+      page: query.page,
+      per_page: query.per_page,
+      published: query.published,
+    };
+
+    const categoryLower = query.category
+      ? this.cleanString(query.category)
+      : null;
+    const isWineType =
+      categoryLower &&
+      ['tinto', 'branco', 'rose', 'rosé'].includes(categoryLower);
+
+    if (categoryLower && this.categoryMap[categoryLower]) {
+      if (!isWineType) {
+        params.category_id = this.categoryMap[categoryLower];
+      } else {
+        params.category_id = 31974513; // Categoria pai para vinhos
+      }
+    }
+
+    if (query.search) {
+      params.q = query.search;
+    }
+
+    const response = await this.api.get('/products', { params });
+    let products = response.data;
+
+    if (isWineType) {
+      const normalizedType = categoryLower;
+      products = products.filter((product: Product) =>
+        product.variants?.some((variant) =>
+          variant.values.some(
+            (value) => this.cleanString(value.pt) === normalizedType,
+          ),
+        ),
       );
+    }
+
+    return products;
+  }
+
+  async fetchProductById(productId: string): Promise<Product | null> {
+    try {
+      const response = await this.api.get(`/products/${productId}`);
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
+      if (error.response?.status === 404) {
         return null;
       }
       throw error;
