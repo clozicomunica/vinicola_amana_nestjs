@@ -72,7 +72,7 @@ export interface CreateOrderPayload {
   shipping?: string;
   shipping_option?: string;
   shipping_cost_customer?: number;
-  payment_status?: string; // Adicionado para definir status de pagamento
+  payment_status?: string;
 }
 
 @Injectable()
@@ -253,7 +253,7 @@ export class NuvemshopService {
     return similares.slice(0, 6);
   }
 
-  async createOrder(payload: CreateOrderPayload): Promise<unknown> {
+  async createOrder(payload: CreateOrderPayload): Promise<any> {
     const defaultAddress: Address = {
       first_name: payload.customer.name.split(' ')[0] || 'Não informado',
       last_name:
@@ -275,14 +275,21 @@ export class NuvemshopService {
       shipping_cost_customer: payload.shipping_cost_customer ?? 0,
       billing_address: { ...defaultAddress, ...payload.billing_address },
       shipping_address: { ...defaultAddress, ...payload.shipping_address },
-      payment_status: 'paid', // ADICIONADO: Marca como pago na criação
+      payment_status: payload.payment_status || 'pending',
     };
 
-    const response: AxiosResponse<unknown> = await this.api.post(
+    const response: AxiosResponse<any> = await this.api.post(
       '/orders',
       formattedPayload,
     );
 
+    return response.data;
+  }
+  async updateOrderToPaid(orderId: string | number): Promise<any> {
+    const payload = {
+      payment_status: 'paid',
+    };
+    const response = await this.api.put(`/orders/${orderId}`, payload);
     return response.data;
   }
 }

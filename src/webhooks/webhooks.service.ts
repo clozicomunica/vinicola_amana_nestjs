@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -8,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import {
   NuvemshopService,
-  CreateOrderPayload,
+  // O 'CreateOrderPayload' não é mais necessário aqui
 } from '../common/services/nuvemshop/nuvemshop.service';
 import * as crypto from 'crypto';
 import { Request } from 'express';
@@ -79,56 +80,35 @@ export class WebhooksService {
       return { status: 'ignored-not-approved' };
     }
 
-    const { metadata } = payment;
-    if (!metadata || !metadata.produtos || !metadata.cliente) {
-      console.warn('[MP Webhook] Metadata incompleto:', metadata);
-      return { status: 'ignored-incomplete-metadata' };
+    // --- NOVA LÓGICA DE ATUALIZAÇÃO ---
+    // A external_reference AGORA é o ID do pedido da Nuvemshop,
+    // conforme definido no novo `mercado-pago.service.ts`
+    const nuvemOrderId = payment.external_reference;
+
+    if (!nuvemOrderId) {
+      console.warn(
+        '[MP Webhook] Pagamento aprovado, mas sem external_reference (ID do pedido Nuvem).',
+        { payment_id: payment.id },
+      );
+      return { status: 'ignored-no-external-ref' };
     }
 
-    const { produtos, cliente } = metadata;
-
-    const [firstName = 'Cliente', ...lastNameParts] = (
-      cliente.name || 'Cliente Anônimo'
-    ).split(' ');
-    const lastName = lastNameParts.join(' ') || 'Anônimo';
-
-    const address = {
-      first_name: firstName,
-      last_name: lastName,
-      address: cliente.address || 'Não informado',
-      number: 'Não informado',
-      floor: cliente.complement || '',
-      city: cliente.city || 'Não informado',
-      province: cliente.state || 'Não informado',
-      zipcode: cliente.zipcode || '00000-000',
-      country: 'BR',
-    };
-
-    const orderPayload: CreateOrderPayload = {
-      customer: {
-        name: cliente.name || 'Cliente Anônimo',
-        email: cliente.email || 'sem-email@exemplo.com',
-        document: cliente.document || '00000000000',
-      },
-      products: produtos.map((p: any) => ({
-        variant_id: p.variant_id,
-        quantity: p.quantity || 1,
-        price: p.price,
-      })),
-      billing_address: address,
-      shipping_address: address,
-      gateway: 'mercadopago',
-      shipping_pickup_type: 'ship',
-      shipping_cost_customer: 0,
-    };
-
     try {
-      const nuvemOrder = await this.nuvemshopService.createOrder(orderPayload);
-      console.log('[MP Webhook] Pedido criado na Nuvemshop:', nuvemOrder);
-      return { status: 'order-created', nuvem_order: nuvemOrder };
+      await (this.nuvemshopService as any).updateOrderToPaid(nuvemOrderId);
+
+      console.log(
+        `[MP Webhook] Pedido ${nuvemOrderId} atualizado para PAGO na Nuvemshop.`,
+      );
+      return { status: 'order-updated', nuvem_order_id: nuvemOrderId };
     } catch (err) {
-      console.error('[MP Webhook] Erro ao criar pedido na Nuvemshop:', err);
-      return { status: 'nuvem-error' };
+      console.error(
+        `[MP Webhook] Erro ao ATUALIZAR pedido ${nuvemOrderId} na Nuvemshop:`,
+        (err as any)?.response?.data || (err as Error).message,
+      );
+      console.error(
+        'VERIFIQUE: Você adicionou o método updateOrderToPaid no NuvemshopService?',
+      );
+      return { status: 'nuvem-update-error' };
     }
   }
 
