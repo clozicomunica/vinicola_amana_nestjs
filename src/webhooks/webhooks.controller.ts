@@ -14,6 +14,7 @@ export class WebhooksController {
   @Post('order-paid')
   async orderPaid(@Req() req: Request, @Res() res: Response) {
     try {
+      console.log('REQUEST', req.body);
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const result = await this.webhooksService.handleOrderPaid(req);
       res.status(200).json(result);

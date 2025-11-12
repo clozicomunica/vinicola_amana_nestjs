@@ -102,7 +102,7 @@ export class MercadoPagoService {
       first_name: firstName,
       last_name: lastName,
       address: cliente.address || 'Não informado',
-      number: cliente.number || 'S/N', // Usando o 'number' do cliente
+      number: cliente.number || '10',
       floor: cliente.complement || '',
       city: cliente.city || 'Não informado',
       province: cliente.state || 'Não informado',

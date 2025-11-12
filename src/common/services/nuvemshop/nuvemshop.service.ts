@@ -153,7 +153,7 @@ export class NuvemshopService {
     let params: any = {
       page: query.page,
       per_page: query.per_page,
-      published: query.published,
+      published: true,
     };
 
     const categoryLower = query.category

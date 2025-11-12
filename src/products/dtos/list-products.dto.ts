@@ -1,4 +1,4 @@
-import { IsOptional, IsBooleanString, IsInt, IsString } from 'class-validator';
+import { IsOptional, IsInt, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListProductsDto {
@@ -13,7 +13,6 @@ export class ListProductsDto {
   per_page?: number = 10;
 
   @IsOptional()
-  @IsBooleanString()
   published?: boolean = true;
 
   @IsOptional()
