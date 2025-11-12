@@ -53,6 +53,8 @@ export class WebhooksService {
       body?.id ||
       body?.payment_id;
 
+    console.log('[MP Webhook] ID recebido na notificação:', paymentId);
+
     if (!paymentId) {
       console.warn('[MP Webhook] Payload sem id. Ignorado.', { query, body });
       return { status: 'ignored-no-id' };
