@@ -119,6 +119,7 @@ export class MercadoPagoService {
     };
 
     let nuvemOrder;
+    let idNuvemShop;
     try {
       nuvemOrder = await this.nuvemshopService.createOrder(orderPayload);
       if (!nuvemOrder || !nuvemOrder.id) {
@@ -129,6 +130,7 @@ export class MercadoPagoService {
       console.log(
         `[MP Service] Pedido ${nuvemOrder.id} criado como 'pending' na Nuvemshop.`,
       );
+      idNuvemShop = nuvemOrder.id;
     } catch (err) {
       console.error(
         '[MP Service] Erro ao criar pedido na Nuvemshop:',
@@ -149,7 +151,7 @@ export class MercadoPagoService {
     }));
 
     const back_urls = {
-      success: `${this.frontUrl}/sucesso`,
+      success: `${this.frontUrl}/sucesso/${nuvemOrder.id}`,
       pending: `${this.frontUrl}/pendente`,
       failure: `${this.frontUrl}/falha`,
     };
@@ -209,6 +211,7 @@ export class MercadoPagoService {
         redirect_url: url,
         preference_id: pref.id,
         mode: this.mode,
+        idNuvemShop,
       };
     } catch (err) {
       console.error(

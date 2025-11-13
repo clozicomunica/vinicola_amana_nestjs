@@ -135,6 +135,12 @@ export class NuvemshopService {
     );
   }
 
+  async getOrderById(idNuvemShop: any): Promise<any> {
+    const result = await this.api.get(`/orders/${idNuvemShop}`);
+
+    return result.data;
+  }
+
   private cleanString(str: string): string {
     return str
       .toLowerCase()

@@ -1,7 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   Controller,
   Post,
   Body,
+  Get,
+  Param,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -35,12 +39,18 @@ export class OrdersController {
   @Post('create-checkout')
   async createCheckout(@Body() body: CreateCheckoutBody) {
     try {
-      const result = await this.ordersService.createCheckout(body);
-      return result;
+      return await this.ordersService.createCheckout(body);
     } catch (e) {
-      console.log(e);
-      const message = 'Erro ao criar checkout';
-      throw new HttpException(message, HttpStatus.INTERNAL_SERVER_ERROR);
+      console.error('Erro create-checkout:', e);
+      throw new HttpException(
+        'Erro ao criar checkout',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
+  }
+
+  @Get(':id')
+  async getOrderById(@Param('id') id: string) {
+    return await this.ordersService.getOrderById(id);
   }
 }
