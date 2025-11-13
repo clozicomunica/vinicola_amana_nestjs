@@ -96,7 +96,7 @@ export class WebhooksService {
     }
 
     try {
-      await (this.nuvemshopService as any).updateOrderToPaid(nuvemOrderId);
+      await this.nuvemshopService.updateOrderToPaid(nuvemOrderId);
 
       console.log(
         `[MP Webhook] Pedido ${nuvemOrderId} atualizado para PAGO na Nuvemshop.`,
