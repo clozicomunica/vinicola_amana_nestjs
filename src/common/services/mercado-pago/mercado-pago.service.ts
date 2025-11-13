@@ -11,7 +11,6 @@ import { ConfigService } from '@nestjs/config';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { Items } from 'mercadopago/dist/clients/commonTypes';
 import { PreferenceRequest } from 'mercadopago/dist/clients/preference/commonTypes';
-// 👇 IMPORTS ADICIONADOS
 import {
   NuvemshopService,
   CreateOrderPayload,
@@ -150,9 +149,9 @@ export class MercadoPagoService {
     }));
 
     const back_urls = {
-      success: `${this.frontUrl}/checkout/sucesso`,
-      pending: `${this.frontUrl}/checkout/pendente`,
-      failure: `${this.frontUrl}/checkout/erro`,
+      success: `${this.frontUrl}/sucesso`,
+      pending: `${this.frontUrl}/pendente`,
+      failure: `${this.frontUrl}/falha`,
     };
 
     const payer =
