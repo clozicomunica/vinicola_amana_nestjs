@@ -30,7 +30,7 @@ export class OrdersService {
         contact_name: nsOrder.customer?.name,
         contact_email: nsOrder.customer?.email,
         total: nsOrder.total,
-        status: nsOrder.status,
+        status: nsOrder.payment_status,
         products: nsOrder.products?.map((p) => ({
           name: p.name,
           quantity: p.quantity,
