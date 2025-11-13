@@ -46,7 +46,7 @@ interface Address {
   first_name: string;
   last_name: string;
   address: string;
-  number: string;
+  number: number | string;
   floor?: string;
   locality?: string;
   city: string;

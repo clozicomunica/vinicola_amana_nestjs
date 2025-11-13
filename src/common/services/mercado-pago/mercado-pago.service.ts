@@ -15,25 +15,21 @@ import { PreferenceRequest } from 'mercadopago/dist/clients/preference/commonTyp
 import {
   NuvemshopService,
   CreateOrderPayload,
-} from '../nuvemshop/nuvemshop.service'; // Verifique se este caminho está correto
-
-// --- Interfaces (copiadas do seu arquivo original) ---
+} from '../nuvemshop/nuvemshop.service';
 
 interface Produto {
   name: string;
   quantity: number;
   price: number;
   variant_id: number;
-  idProduto: string; // Isso vem do seu DTO, mantido
+  idProduto: string;
 }
-
-// Interface Cliente atualizada para incluir 'number' que vem do frontend
 interface Cliente {
   name: string;
   email: string;
   document?: string;
   address?: string;
-  number?: string; // Adicionado (vem do CartPage.tsx)
+  number?: string;
   city?: string;
   state?: string;
   zipcode?: string;
@@ -53,8 +49,6 @@ interface PreferenceMetadataProduto {
   name: string;
 }
 
-// --- Fim das Interfaces ---
-
 @Injectable()
 export class MercadoPagoService {
   private readonly mp: MercadoPagoConfig;
@@ -64,7 +58,6 @@ export class MercadoPagoService {
 
   constructor(
     private configService: ConfigService,
-    // 👇 INJEÇÃO ADICIONADA
     private readonly nuvemshopService: NuvemshopService,
   ) {
     const accessToken = this.configService.get<string>('MP_ACCESS_TOKEN');
@@ -80,7 +73,6 @@ export class MercadoPagoService {
   async createCheckout(body: CreateCheckoutBody) {
     const { produtos, cliente, total } = body;
 
-    // 1. Validações (manter)
     if (!produtos || !produtos.length || total <= 0) {
       throw new BadRequestException(
         'Invalid input: products empty or invalid total',
@@ -91,18 +83,16 @@ export class MercadoPagoService {
       throw new BadRequestException('Invalid product quantity or price');
     }
 
-    // 2. Criar Pedido na Nuvemshop PRIMEIRO
     const [firstName = 'Cliente', ...lastNameParts] = (
       cliente.name || 'Cliente Anônimo'
     ).split(' ');
     const lastName = lastNameParts.join(' ') || 'Anônimo';
 
-    // O 'number' vem do frontend 'CartPage.tsx'
     const address = {
       first_name: firstName,
       last_name: lastName,
       address: cliente.address || 'Não informado',
-      number: cliente.number || '10',
+      number: cliente.number ? Number(cliente.number) : 10,
       floor: cliente.complement || '',
       city: cliente.city || 'Não informado',
       province: cliente.state || 'Não informado',
@@ -126,12 +116,11 @@ export class MercadoPagoService {
       gateway: 'mercadopago',
       shipping_pickup_type: 'ship',
       shipping_cost_customer: 0,
-      payment_status: 'pending', // 👈 Criar como pendente
+      payment_status: 'pending',
     };
 
     let nuvemOrder;
     try {
-      // Usando 'any' temporariamente pois não temos a interface de retorno da Nuvemshop
       nuvemOrder = await this.nuvemshopService.createOrder(orderPayload);
       if (!nuvemOrder || !nuvemOrder.id) {
         throw new Error(
@@ -150,27 +139,24 @@ export class MercadoPagoService {
         'Falha ao registrar pedido na Nuvemshop',
       );
     }
-    // --- Fim da Criação Nuvemshop ---
-
-    // 3. Preparar Preferência do Mercado Pago
     const preference = new Preference(this.mp);
 
     const items: Items[] = produtos.map((p) => ({
-      id: p.idProduto || p.variant_id.toString(), //
-      title: p.name, //
-      quantity: p.quantity, //
-      unit_price: p.price, //
-      currency_id: 'BRL', //
+      id: p.idProduto || p.variant_id.toString(),
+      title: p.name,
+      quantity: p.quantity,
+      unit_price: p.price,
+      currency_id: 'BRL',
     }));
 
     const back_urls = {
-      success: `${this.frontUrl}/checkout/sucesso`, //
-      pending: `${this.frontUrl}/checkout/pendente`, //
-      failure: `${this.frontUrl}/checkout/erro`, //
+      success: `${this.frontUrl}/checkout/sucesso`,
+      pending: `${this.frontUrl}/checkout/pendente`,
+      failure: `${this.frontUrl}/checkout/erro`,
     };
 
     const payer =
-      this.mode === 'prod' //
+      this.mode === 'prod'
         ? {
             name: cliente.name,
             email: cliente.email,
@@ -179,8 +165,6 @@ export class MercadoPagoService {
               : {}),
           }
         : undefined;
-
-    // Metadata para o MP (para referência)
     const safeCliente = {
       name: cliente.name,
       email: cliente.email,
@@ -198,25 +182,21 @@ export class MercadoPagoService {
       price: p.price,
       name: p.name,
     }));
-
-    // 4. Montar Body da Preferência
     const prefBody: PreferenceRequest = {
       items,
       back_urls,
-      auto_return: 'approved', //
-      notification_url: `${this.backUrl}/webhooks/order-paid`, //
-      // 👇 MUDANÇA IMPORTANTE
-      external_reference: nuvemOrder.id.toString(), // Vincular o ID da Nuvemshop
+      auto_return: 'approved',
+      notification_url: `${this.backUrl}/webhooks/order-paid`,
+      external_reference: nuvemOrder.id.toString(),
       metadata: {
         produtos: metadataProdutos,
         cliente: safeCliente,
         total,
-        nuvem_order_id: nuvemOrder.id, // Armazenar o ID aqui também
+        nuvem_order_id: nuvemOrder.id,
       },
       ...(payer ? { payer } : {}),
     };
 
-    // 5. Criar Preferência e Retornar
     try {
       const pref = await preference.create({ body: prefBody });
       const url =
@@ -236,8 +216,6 @@ export class MercadoPagoService {
         'Falha ao criar preferência MP:',
         (err as any)?.response?.data || (err as Error).message,
       );
-      // Se falhar aqui, o pedido ficou "pendente" na Nuvemshop,
-      // mas não podemos gerar o link de pagamento.
       throw new InternalServerErrorException(
         'Failed to create payment preference',
       );
