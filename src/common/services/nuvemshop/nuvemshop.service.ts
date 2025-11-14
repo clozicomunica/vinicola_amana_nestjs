@@ -73,6 +73,32 @@ export interface CreateOrderPayload {
   shipping_option?: string;
   shipping_cost_customer?: number;
   payment_status?: string;
+  note: string; // Mantido como obrigatório, conforme erro
+}
+
+export interface Coupon {
+  // Expandido com todas as propriedades da API
+  id: string;
+  code: string;
+  type: 'percentage' | 'absolute' | 'shipping';
+  value: string;
+  valid?: boolean;
+  used: number;
+  max_uses: number | null;
+  includes_shipping?: boolean;
+  start_date?: string | null;
+  start_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
+  min_price: string | null;
+  categories?: any[] | null;
+  products?: any[] | null;
+  first_consumer_purchase?: boolean;
+  max_uses_per_client?: number | null;
+  is_deleted?: boolean;
+  combines_with_other_discounts?: boolean;
+  only_cheapest_shipping?: boolean;
+  max_discount_amount?: number | null;
 }
 
 @Injectable()
@@ -296,6 +322,11 @@ export class NuvemshopService {
       payment_status: 'paid',
     };
     const response = await this.api.put(`/orders/${orderId}`, payload);
+    return response.data;
+  }
+
+  async fetchCoupons(params: any): Promise<Coupon[]> {
+    const response = await this.api.get('/coupons', { params });
     return response.data;
   }
 }

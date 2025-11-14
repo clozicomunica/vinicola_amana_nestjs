@@ -1,3 +1,5 @@
+/* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
@@ -14,6 +16,7 @@ import { PreferenceRequest } from 'mercadopago/dist/clients/preference/commonTyp
 import {
   NuvemshopService,
   CreateOrderPayload,
+  Coupon,
 } from '../nuvemshop/nuvemshop.service';
 
 interface Produto {
@@ -39,6 +42,7 @@ interface CreateCheckoutBody {
   produtos: Produto[];
   cliente: Cliente;
   total: number;
+  couponCode?: string;
 }
 
 interface PreferenceMetadataProduto {
@@ -70,7 +74,7 @@ export class MercadoPagoService {
   }
 
   async createCheckout(body: CreateCheckoutBody) {
-    const { produtos, cliente, total } = body;
+    const { produtos, cliente, total, couponCode } = body;
 
     if (!produtos || !produtos.length || total <= 0) {
       throw new BadRequestException(
@@ -99,6 +103,39 @@ export class MercadoPagoService {
       country: 'BR',
     };
 
+    let discountAmount = 0;
+    let coupon: Coupon | undefined;
+    let note = '';
+
+    if (couponCode) {
+      const params = { q: couponCode, valid: true };
+      const coupons = await this.nuvemshopService.fetchCoupons(params);
+      if (coupons.length > 0) {
+        coupon = coupons[0];
+        const subtotal = produtos.reduce(
+          (sum, p) => sum + p.price * p.quantity,
+          0,
+        );
+        if (coupon.min_price && subtotal < parseFloat(coupon.min_price)) {
+          throw new BadRequestException(
+            `Subtotal abaixo do mínimo para o cupom: R$ ${coupon.min_price}`,
+          );
+        }
+        if (coupon.max_uses !== null && coupon.used >= coupon.max_uses) {
+          throw new BadRequestException('Cupom atingiu o limite de usos.');
+        }
+        if (coupon.type === 'percentage') {
+          discountAmount = subtotal * (parseFloat(coupon.value) / 100); // Ex: 15% = 0.15
+        } else if (coupon.type === 'absolute') {
+          discountAmount = parseFloat(coupon.value);
+        }
+        // Para shipping, ignore pois frete é grátis
+        note = `Cupom aplicado: ${coupon.code} (ID: ${coupon.id})`;
+      } else {
+        throw new BadRequestException('Cupom inválido.');
+      }
+    }
+
     const orderPayload: CreateOrderPayload = {
       customer: {
         name: cliente.name || 'Cliente Anônimo',
@@ -116,6 +153,7 @@ export class MercadoPagoService {
       shipping_pickup_type: 'ship',
       shipping_cost_customer: 0,
       payment_status: 'pending',
+      note,
     };
 
     let nuvemOrder;
@@ -140,6 +178,7 @@ export class MercadoPagoService {
         'Falha ao registrar pedido na Nuvemshop',
       );
     }
+
     const preference = new Preference(this.mp);
 
     const items: Items[] = produtos.map((p) => ({
@@ -149,6 +188,16 @@ export class MercadoPagoService {
       unit_price: p.price,
       currency_id: 'BRL',
     }));
+
+    if (discountAmount > 0) {
+      items.push({
+        title: `Desconto Cupom ${couponCode}`,
+        quantity: 1,
+        unit_price: -discountAmount,
+        currency_id: 'BRL',
+        id: '',
+      });
+    }
 
     const back_urls = {
       success: `${this.frontUrl}/sucesso/${nuvemOrder.id}`,
@@ -192,7 +241,7 @@ export class MercadoPagoService {
       metadata: {
         produtos: metadataProdutos,
         cliente: safeCliente,
-        total,
+        total: total - discountAmount, // Atualizado para refletir total com desconto
         nuvem_order_id: nuvemOrder.id,
       },
       ...(payer ? { payer } : {}),

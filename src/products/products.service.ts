@@ -104,6 +104,7 @@ export class ProductsService {
       gateway: 'not-provided',
       shipping_pickup_type: 'ship',
       shipping_cost_customer: 0,
+      note: '', // Adicionado para satisfazer o tipo (obrigatório)
     };
     return this.nuvemshopService.createOrder(payload);
   }

@@ -30,6 +30,7 @@ interface CreateCheckoutBody {
     complement: string;
   };
   total: number;
+  couponCode?: string;
 }
 
 @Controller('orders')
