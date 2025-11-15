@@ -11,13 +11,10 @@ import {
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 
-interface CreateCheckoutBody {
+export interface CreateCheckoutBody {
   produtos: Array<{
-    name: string;
     quantity: number;
-    price: number;
     variant_id: number;
-    idProduto: string;
   }>;
   cliente: {
     name: string;
@@ -29,7 +26,6 @@ interface CreateCheckoutBody {
     zipcode: string;
     complement: string;
   };
-  total: number;
   couponCode?: string;
 }
 

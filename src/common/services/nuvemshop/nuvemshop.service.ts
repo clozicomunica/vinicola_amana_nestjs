@@ -73,7 +73,7 @@ export interface CreateOrderPayload {
   shipping_option?: string;
   shipping_cost_customer?: number;
   payment_status?: string;
-  note: string; // Mantido como obrigatório, conforme erro
+  note?: string; // Mantido como obrigatório, conforme erro
 }
 
 export interface Coupon {
@@ -163,6 +163,12 @@ export class NuvemshopService {
 
   async getOrderById(idNuvemShop: any): Promise<any> {
     const result = await this.api.get(`/orders/${idNuvemShop}`);
+
+    return result.data;
+  }
+
+  async get(idProduto: number): Promise<any> {
+    const result = await this.api.get(`/products/${idProduto}`);
 
     return result.data;
   }
