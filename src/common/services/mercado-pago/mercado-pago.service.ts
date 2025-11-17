@@ -293,9 +293,8 @@ export class MercadoPagoService {
 
     const preference = new Preference(this.mp);
 
-    // montar items
     let items: Items[] = produtos.map((p) => ({
-      id: p.idProduto || p.variant_id,
+      id: p.idProduto,
       title: p.name ?? 'Produto',
       quantity: p.quantity,
       unit_price: this.round2(p.price ?? 0),
