@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
@@ -285,14 +286,14 @@ export class MercadoPagoService {
     }
 
     const preference = new Preference(this.mp);
+let items: Items[] = produtos.map((p) => ({
+  id: String(p.idProduto),
+  title: p.name ?? 'Produto',
+  quantity: p.quantity,
+  unit_price: this.round2(p.price ?? 0),
+  currency_id: 'BRL',
+}));
 
-    let items: Items[] = produtos.map((p) => ({
-      id: Number(p.idProduto),
-      title: p.name ?? 'Produto',
-      quantity: p.quantity,
-      unit_price: this.round2(p.price ?? 0),
-      currency_id: 'BRL',
-    }));
 
     // aplicar desconto distribuído (evita item negativo)
     if (discountAmount > 0) {
