@@ -18,6 +18,7 @@ import {
   CreateOrderPayload,
   Coupon,
 } from '../nuvemshop/nuvemshop.service';
+import { MelhorEnvioService } from '../melhor-envio/melhor-envio.service';
 
 interface Produto {
   quantity: number;
@@ -63,6 +64,7 @@ export class MercadoPagoService {
   constructor(
     private configService: ConfigService,
     private readonly nuvemshopService: NuvemshopService,
+    private readonly melhorEnvioService: MelhorEnvioService,
   ) {
     const accessToken = this.configService.get<string>('MP_ACCESS_TOKEN');
     if (!accessToken) {
@@ -148,6 +150,34 @@ export class MercadoPagoService {
         'Invalid product data: missing idProduto, variant_id, or invalid quantity',
       );
     }
+
+     let shippingCost = 0;
+  let shippingOption: any = null;
+  
+  if (cliente.zipcode) {
+    try {
+      const shippingProducts = produtos.map(p => ({
+        id: p.idProduto,
+        quantity: p.quantity,
+        price: p.price ?? 0,
+        weight: 1.5, // Peso padrão de garrafa de vinho em kg
+      }));
+
+      shippingOption = await this.melhorEnvioService.getCheapestShipping(
+        cliente.zipcode,
+        shippingProducts,
+      );
+
+      if (shippingOption) {
+        shippingCost = parseFloat(shippingOption.price);
+        this.logger.log(
+          `Frete calculado: ${shippingOption.company.name} - R$ ${shippingCost}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn('Erro ao calcular frete, continuando sem frete:', err);
+    }
+  }
 
     const uniqueProductIds = Array.from(
       new Set(produtos.map((p) => p.idProduto)),
@@ -237,30 +267,37 @@ export class MercadoPagoService {
       }
     }
 
-    const calculatedTotal = this.round2(subtotal - discountAmount);
-    if (calculatedTotal <= 0) {
-      throw new BadRequestException('Total inválido após descontos');
-    }
+   const calculatedTotal = this.round2(subtotal - discountAmount + shippingCost);
+  if (calculatedTotal <= 0) {
+    throw new BadRequestException('Total inválido após descontos');
+  }
 
     const orderPayload: CreateOrderPayload = {
-      customer: {
-        name: cliente.name || 'Cliente Anônimo',
-        email: cliente.email || 'sem-email@exemplo.com',
-        document: cliente.document || '00000000000',
-      },
-      products: produtos.map((p) => ({
-        variant_id: p.variant_id,
-        quantity: p.quantity || 1,
-        price: p.price! - discountAmount,
-      })),
-      billing_address: address,
-      shipping_address: address,
-      gateway: 'mercadopago',
-      shipping_pickup_type: 'ship',
-      shipping_cost_customer: 0,
-      payment_status: 'pending',
-      note: note?.length > 0 ? note : undefined,
-    };
+    customer: {
+      name: cliente.name || 'Cliente Anônimo',
+      email: cliente.email || 'sem-email@exemplo.com',
+      document: cliente.document || '00000000000',
+    },
+    products: produtos.map((p) => ({
+      variant_id: p.variant_id,
+      quantity: p.quantity || 1,
+      price: p.price!,
+    })),
+    billing_address: address,
+    shipping_address: address,
+    gateway: 'mercadopago',
+    shipping_pickup_type: 'ship',
+    shipping_cost_customer: shippingCost,
+    shipping: shippingOption 
+      ? `${shippingOption.company.name} - ${shippingOption.name}` 
+      : 'Não informado',
+    shipping_option: shippingOption 
+      ? `${shippingOption.delivery_time} dias úteis` 
+      : 'Não informado',
+    payment_status: 'pending',
+    note: note?.length > 0 ? note : undefined,
+  };
+
 
     let nuvemOrder: any;
     let idNuvemShop: any;
@@ -286,19 +323,28 @@ export class MercadoPagoService {
     }
 
     const preference = new Preference(this.mp);
-let items: Items[] = produtos.map((p) => ({
-  id: String(p.idProduto),
-  title: p.name ?? 'Produto',
-  quantity: p.quantity,
-  unit_price: this.round2(p.price ?? 0),
-  currency_id: 'BRL',
-}));
+ let items: Items[] = produtos.map((p) => ({
+    id: String(p.idProduto),
+    title: p.name ?? 'Produto',
+    quantity: p.quantity,
+    unit_price: this.round2(p.price ?? 0),
+    currency_id: 'BRL',
+  }));
 
 
-    // aplicar desconto distribuído (evita item negativo)
-    if (discountAmount > 0) {
-      items = this.applyDiscountToItems(items, discountAmount);
-    }
+      if (discountAmount > 0) {
+    items = this.applyDiscountToItems(items, discountAmount);
+  }
+
+    if (shippingCost > 0 && shippingOption) {
+    items.push({
+      id: 'shipping',
+      title: `Frete - ${shippingOption.company.name}`,
+      quantity: 1,
+      unit_price: this.round2(shippingCost),
+      currency_id: 'BRL',
+    });
+  }
 
     const back_urls = {
       success: `${this.frontUrl}/sucesso/${nuvemOrder.id}`,
@@ -337,19 +383,25 @@ let items: Items[] = produtos.map((p) => ({
     }));
 
     const prefBody: PreferenceRequest = {
-      items,
-      back_urls,
-      auto_return: 'approved',
-      notification_url: `${this.backUrl}/webhooks/order-paid`,
-      external_reference: nuvemOrder.id.toString(),
-      metadata: {
-        produtos: metadataProdutos,
-        cliente: safeCliente,
-        total: calculatedTotal,
-        nuvem_order_id: nuvemOrder.id,
-      },
-      ...(payer ? { payer } : {}),
-    };
+    items,
+    back_urls,
+    auto_return: 'approved',
+    notification_url: `${this.backUrl}/webhooks/order-paid`,
+    external_reference: nuvemOrder.id.toString(),
+    metadata: {
+      produtos: metadataProdutos,
+      cliente: safeCliente,
+      total: calculatedTotal,
+      nuvem_order_id: nuvemOrder.id,
+      shipping_cost: shippingCost,
+      shipping_option: shippingOption ? {
+        service: shippingOption.name,
+        company: shippingOption.company.name,
+        delivery_time: shippingOption.delivery_time,
+      } : null,
+    },
+    ...(payer ? { payer } : {}),
+  };
 
     try {
       const pref = await preference.create({ body: prefBody });
@@ -377,11 +429,17 @@ let items: Items[] = produtos.map((p) => ({
       }
 
       return {
-        redirect_url: url,
-        preference_id: (pref as any).id,
-        mode: this.mode,
-        idNuvemShop,
-      };
+    redirect_url: url,
+    preference_id: (pref as any).id,
+    mode: this.mode,
+    idNuvemShop,
+    shipping: shippingOption ? {
+      cost: shippingCost,
+      service: shippingOption.name,
+      company: shippingOption.company.name,
+      delivery_time: shippingOption.delivery_time,
+    } : null,
+  };
     } catch (err) {
       this.logger.error(
         'Falha ao criar preferência MP:',

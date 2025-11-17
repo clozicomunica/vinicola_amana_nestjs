@@ -6,6 +6,7 @@ import { OrdersModule } from './orders/orders.module';
 import { CommonModule } from './common/common.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { CouponsModule } from './coupons/coupons.module';
+import { ShippingModule } from './shipping/shipping.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CouponsModule } from './coupons/coupons.module';
     CommonModule,
     WebhooksModule,
     CouponsModule,
+    ShippingModule,
   ],
 })
 export class AppModule {}

@@ -1,12 +1,22 @@
+/* eslint-disable prettier/prettier */
 import { Module } from '@nestjs/common';
-import { NuvemshopService } from '../common/services/nuvemshop/nuvemshop.service';
-import { MercadoPagoService } from '../common/services/mercado-pago/mercado-pago.service';
+import { ConfigModule } from '@nestjs/config';
+import { MercadoPagoService } from './services/mercado-pago/mercado-pago.service';
+import { NuvemshopService } from './services/nuvemshop/nuvemshop.service';
+import { MelhorEnvioService } from './services/melhor-envio/melhor-envio.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  controllers: [],
-  providers: [NuvemshopService, MercadoPagoService],
-  imports: [AuthModule],
-  exports: [NuvemshopService, MercadoPagoService],
+  imports: [ConfigModule, AuthModule],
+  providers: [
+    MercadoPagoService,
+    NuvemshopService,
+    MelhorEnvioService,
+  ],
+  exports: [
+    MercadoPagoService,
+    NuvemshopService,
+    MelhorEnvioService,
+  ],
 })
 export class CommonModule {}
