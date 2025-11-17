@@ -8,6 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NuvemshopService } from '../nuvemshop/nuvemshop.service';
 import axios, { AxiosInstance } from 'axios';
 
 export interface ShippingOption {
@@ -51,7 +52,10 @@ export class MelhorEnvioService {
   private readonly logger = new Logger(MelhorEnvioService.name);
   private readonly fromPostalCode: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly nuvemshopService: NuvemshopService,
+  ) {
     const token = this.configService.get<string>('MELHOR_ENVIO_TOKEN');
     if (!token) {
       throw new Error('MELHOR_ENVIO_TOKEN is not defined');
@@ -75,6 +79,50 @@ export class MelhorEnvioService {
   }
 
   /**
+   * Busca as dimensões do produto na Nuvemshop
+   */
+  private async getProductDimensions(productId: string | number): Promise<{
+    width: number;
+    height: number;
+    length: number;
+    weight: number;
+  }> {
+    try {
+      const product = await this.nuvemshopService.get(Number(productId));
+
+      // A Nuvemshop retorna dimensões em diferentes formatos
+      // Precisamos garantir valores padrão caso não existam
+      const width = product.width || product.dimensions?.width || 10;
+      const height = product.height || product.dimensions?.height || 30;
+      const length = product.length || product.dimensions?.length || 10;
+      const weight = product.weight || 1.5;
+
+      this.logger.debug(
+        `Dimensões do produto ${productId}: ${width}x${height}x${length}cm, ${weight}kg`,
+      );
+
+      return {
+        width: Number(width),
+        height: Number(height),
+        length: Number(length),
+        weight: Number(weight),
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Erro ao buscar dimensões do produto ${productId}, usando valores padrão`,
+        error,
+      );
+      // Retorna dimensões padrão de uma garrafa de vinho em caso de erro
+      return {
+        width: 10,
+        height: 30,
+        length: 10,
+        weight: 1.5,
+      };
+    }
+  }
+
+  /**
    * Calcula o frete para o carrinho
    */
   async calculateShipping(
@@ -82,7 +130,7 @@ export class MelhorEnvioService {
     products: Array<{
       id: string | number;
       quantity: number;
-      weight?: number; // em kg
+      weight?: number; // peso opcional passado manualmente
       price: number;
     }>,
   ): Promise<ShippingOption[]> {
@@ -93,16 +141,22 @@ export class MelhorEnvioService {
         throw new BadRequestException('CEP inválido');
       }
 
-      // Prepara os produtos para a API do Melhor Envio
-      const productsPayload = products.map((product) => ({
-        id: String(product.id),
-        width: 10, // cm - ajuste conforme seus produtos
-        height: 30, // cm - altura de uma garrafa de vinho
-        length: 10, // cm - ajuste conforme seus produtos
-        weight: product.weight || 1.5, // kg - peso padrão de uma garrafa
-        insurance_value: product.price,
-        quantity: product.quantity,
-      }));
+      // Busca as dimensões de cada produto na Nuvemshop
+      const productsWithDimensions = await Promise.all(
+        products.map(async (product) => {
+          const dimensions = await this.getProductDimensions(product.id);
+          
+          return {
+            id: String(product.id),
+            width: dimensions.width,
+            height: dimensions.height,
+            length: dimensions.length,
+            weight: product.weight || dimensions.weight, // Usa peso passado ou da API
+            insurance_value: product.price,
+            quantity: product.quantity,
+          };
+        }),
+      );
 
       const payload: CalculateShippingRequest = {
         from: {
@@ -111,7 +165,7 @@ export class MelhorEnvioService {
         to: {
           postal_code: cleanToPostalCode,
         },
-        products: productsPayload,
+        products: productsWithDimensions,
       };
 
       this.logger.log('Calculando frete:', JSON.stringify(payload, null, 2));

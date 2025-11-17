@@ -34,6 +34,15 @@ export interface Product {
   categories?: Category[];
   region?: string;
   variants?: Variant[];
+  width?: number;
+  height?: number;
+  length?: number;
+  weight?: number;
+  dimensions?: {
+    width?: number;
+    height?: number;
+    length?: number;
+  };
 }
 
 interface Customer {
