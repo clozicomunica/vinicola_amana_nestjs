@@ -114,10 +114,10 @@ export class MelhorEnvioService {
       );
       // Retorna dimensões padrão de uma garrafa de vinho em caso de erro
       return {
-        width: 10,
-        height: 30,
-        length: 10,
-        weight: 1.5,
+        width: 21,
+        height: 33,
+        length: 20,
+        weight: 1.7,
       };
     }
   }
