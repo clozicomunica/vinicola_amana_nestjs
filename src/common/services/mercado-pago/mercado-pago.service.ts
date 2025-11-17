@@ -92,10 +92,6 @@ export class MercadoPagoService {
     return Math.round((n + Number.EPSILON) * 100) / 100;
   }
 
-  /**
-   * Distribui o desconto proporcionalmente entre os itens, retornando novos itens com unit_price ajustado.
-   * Isso evita enviar item com unit_price negativo ao Mercado Pago.
-   */
   private applyDiscountToItems(
     items: Items[],
     discountAmount: number,
@@ -121,7 +117,6 @@ export class MercadoPagoService {
       };
     });
 
-    // corrigir arredondamento: garantir que soma dos itens ajustados == subtotal - discountAmount
     const adjustedTotal = adjusted.reduce(
       (s, it) => s + Number(it.unit_price) * Number(it.quantity),
       0,
@@ -153,7 +148,6 @@ export class MercadoPagoService {
       );
     }
 
-    // Buscar produtos únicos em paralelo (1 req por produto)
     const uniqueProductIds = Array.from(
       new Set(produtos.map((p) => p.idProduto)),
     );
@@ -212,7 +206,6 @@ export class MercadoPagoService {
     let coupon: Coupon | undefined;
     let note = '';
 
-    // Recalcular subtotal com preços reais
     const subtotal = this.round2(
       produtos.reduce((sum, p) => sum + (p.price ?? 0) * p.quantity, 0),
     );
@@ -294,7 +287,7 @@ export class MercadoPagoService {
     const preference = new Preference(this.mp);
 
     let items: Items[] = produtos.map((p) => ({
-      id: p.idProduto,
+      id: Number(p.idProduto),
       title: p.name ?? 'Produto',
       quantity: p.quantity,
       unit_price: this.round2(p.price ?? 0),
