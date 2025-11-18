@@ -413,7 +413,7 @@ export class MercadoPagoService {
       items,
       back_urls,
       auto_return: 'approved',
-      notification_url: `${this.backUrl}/webhooks/order-paid`,
+      notification_url: `${this.backUrl}/api/webhooks/order-paid`,
       external_reference: nuvemOrder.id.toString(),
       metadata: {
         produtos: metadataProdutos,

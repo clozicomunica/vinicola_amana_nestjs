@@ -1,3 +1,5 @@
+/* eslint-disable prefer-const */
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
@@ -42,78 +44,98 @@ export class WebhooksService {
   }
 
   async handleOrderPaid(req: Request): Promise<any> {
-    const query = req.query || {};
-    const body = req.body || {};
+  const query = req.query || {};
+  const body = req.body || {};
 
-    // eslint-disable-next-line prefer-const
-    let paymentId =
-      query.id ||
-      query['data.id'] ||
-      body?.data?.id ||
-      body?.id ||
-      body?.payment_id;
+  let paymentId =
+    query.id ||
+    query['data.id'] ||
+    body?.data?.id ||
+    body?.id ||
+    body?.payment_id;
 
-    console.log('[MP Webhook] ID recebido na notificação:', paymentId);
+  console.log('[MP Webhook] ===== NOVA NOTIFICAÇÃO =====');
+  console.log('[MP Webhook] Query:', JSON.stringify(query));
+  console.log('[MP Webhook] Body:', JSON.stringify(body));
+  console.log('[MP Webhook] Payment ID:', paymentId);
 
-    if (!paymentId) {
-      console.warn('[MP Webhook] Payload sem id. Ignorado.', { query, body });
-      return { status: 'ignored-no-id' };
-    }
-
-    const paymentClient = new Payment(this.mp);
-    let payment;
-    try {
-      payment = await paymentClient.get({ id: String(paymentId) });
-    } catch (err) {
-      console.error(
-        '[MP Webhook] Falha ao buscar payment no MP:',
-        err?.response?.data || err?.message || err,
-      );
-      return { status: 'mp-fetch-error' };
-    }
-
-    console.log('[MP Webhook] OK', {
-      payment_id: payment.id,
-      status: payment.status,
-      external_reference: payment.external_reference,
-    });
-
-    if (payment.status !== 'approved') {
-      return { status: 'ignored-not-approved' };
-    }
-
-    // --- NOVA LÓGICA DE ATUALIZAÇÃO ---
-    // A external_reference AGORA é o ID do pedido da Nuvemshop,
-    // conforme definido no novo `mercado-pago.service.ts`
-    const nuvemOrderId = payment.external_reference;
-
-    if (!nuvemOrderId) {
-      console.warn(
-        '[MP Webhook] Pagamento aprovado, mas sem external_reference (ID do pedido Nuvem).',
-        { payment_id: payment.id },
-      );
-      return { status: 'ignored-no-external-ref' };
-    }
-
-    try {
-      await this.nuvemshopService.updateOrderToPaid(nuvemOrderId);
-
-      console.log(
-        `[MP Webhook] Pedido ${nuvemOrderId} atualizado para PAGO na Nuvemshop.`,
-      );
-      return { status: 'order-updated', nuvem_order_id: nuvemOrderId };
-    } catch (err) {
-      console.error(
-        `[MP Webhook] Erro ao ATUALIZAR pedido ${nuvemOrderId} na Nuvemshop:`,
-        (err as any)?.response?.data || (err as Error).message,
-      );
-      console.error(
-        'VERIFIQUE: Você adicionou o método updateOrderToPaid no NuvemshopService?',
-      );
-      return { status: 'nuvem-update-error' };
-    }
+  if (!paymentId) {
+    console.warn('[MP Webhook] Payload sem id. Ignorado.', { query, body });
+    return { status: 'ignored-no-id' };
   }
 
+  const paymentClient = new Payment(this.mp);
+  let payment;
+  
+  try {
+    payment = await paymentClient.get({ id: String(paymentId) });
+  } catch (err) {
+    console.error(
+      '[MP Webhook] Falha ao buscar payment no MP:',
+      err?.response?.data || err?.message || err,
+    );
+    return { status: 'mp-fetch-error' };
+  }
+
+  console.log('[MP Webhook] Pagamento recebido:', {
+    payment_id: payment.id,
+    status: payment.status,
+    status_detail: payment.status_detail,
+    external_reference: payment.external_reference,
+    metadata: payment.metadata,
+  });
+
+  // ⚠️ CRÍTICO: Só processa pagamentos aprovados
+  if (payment.status !== 'approved') {
+    console.log(`[MP Webhook] Pagamento não aprovado. Status: ${payment.status}`);
+    return { status: 'ignored-not-approved', current_status: payment.status };
+  }
+
+  // Pega o ID do pedido da Nuvemshop
+  const nuvemOrderId = payment.external_reference || payment.metadata?.nuvem_order_id;
+
+  if (!nuvemOrderId) {
+    console.warn(
+      '[MP Webhook] Pagamento aprovado, mas sem external_reference.',
+      { payment_id: payment.id },
+    );
+    return { status: 'ignored-no-external-ref' };
+  }
+
+  console.log(`[MP Webhook] Tentando atualizar pedido ${nuvemOrderId} para PAGO...`);
+
+  try {
+    const result = await this.nuvemshopService.updateOrderToPaid(nuvemOrderId);
+    
+    console.log(
+      `[MP Webhook] ✅ Pedido ${nuvemOrderId} atualizado para PAGO com sucesso!`,
+      result
+    );
+    
+    return { 
+      status: 'order-updated', 
+      nuvem_order_id: nuvemOrderId,
+      payment_id: payment.id,
+      updated_at: new Date().toISOString()
+    };
+  } catch (err: any) {
+    console.error(
+      `[MP Webhook] ❌ Erro ao atualizar pedido ${nuvemOrderId}:`,
+      {
+        message: err?.message,
+        response: err?.response?.data,
+        status: err?.response?.status,
+      }
+    );
+    
+    // Retorna 200 mesmo com erro para evitar retries infinitos do MP
+    return { 
+      status: 'nuvem-update-error',
+      error: err?.message,
+      nuvem_order_id: nuvemOrderId
+    };
+  }
+}
   // eslint-disable-next-line @typescript-eslint/require-await
   async handleStoreRedact(req: Request): Promise<void> {
     const rawBody = req.body.toString('utf-8');

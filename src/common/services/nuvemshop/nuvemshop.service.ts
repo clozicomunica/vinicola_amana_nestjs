@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -333,12 +334,40 @@ export class NuvemshopService {
     return response.data;
   }
   async updateOrderToPaid(orderId: string | number): Promise<any> {
+  try {
+    console.log(`[NuvemShop] Atualizando pedido ${orderId} para PAID...`);
+    
+    // Primeiro, busca o pedido atual para ver o status
+    const currentOrder = await this.api.get(`/orders/${orderId}`);
+    console.log(`[NuvemShop] Status atual do pedido: ${currentOrder.data.payment_status}`);
+    
+    // Se já estiver pago, não faz nada
+    if (currentOrder.data.payment_status === 'paid') {
+      console.log(`[NuvemShop] Pedido ${orderId} já está como PAID. Ignorando.`);
+      return currentOrder.data;
+    }
+    
+    // Atualiza o status do pagamento
     const payload = {
       payment_status: 'paid',
     };
+    
     const response = await this.api.put(`/orders/${orderId}`, payload);
+    
+    console.log(`[NuvemShop] ✅ Pedido ${orderId} atualizado com sucesso!`);
+    console.log(`[NuvemShop] Novo status: ${response.data.payment_status}`);
+    
     return response.data;
+  } catch (err: any) {
+    console.error(`[NuvemShop] ❌ Erro ao atualizar pedido ${orderId}:`, {
+      status: err?.response?.status,
+      statusText: err?.response?.statusText,
+      data: err?.response?.data,
+      message: err?.message,
+    });
+    throw err;
   }
+}
 
   async fetchCoupons(params: any): Promise<Coupon[]> {
     const response = await this.api.get('/coupons', { params });

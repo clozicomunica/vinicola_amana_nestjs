@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable prettier/prettier */
 import { Controller, Post, Get, Req, Res } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 import type { Request, Response } from 'express';
@@ -13,16 +15,23 @@ export class WebhooksController {
 
   @Post('order-paid')
   async orderPaid(@Req() req: Request, @Res() res: Response) {
-    try {
-      console.log('REQUEST', req.body);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const result = await this.webhooksService.handleOrderPaid(req);
-      res.status(200).json(result);
-    } catch (error) {
-      console.error('[MP Webhook] Error:', error);
-      res.status(200).json({ status: 'error-logged' }); // 200 para evitar retries
-    }
+  try {
+    console.log('========================================');
+    console.log('[Webhook Controller] Nova requisição recebida');
+    console.log('[Webhook Controller] Headers:', req.headers);
+    console.log('[Webhook Controller] Query:', req.query);
+    console.log('[Webhook Controller] Body:', req.body);
+    console.log('========================================');
+    
+    const result = await this.webhooksService.handleOrderPaid(req);
+    
+    console.log('[Webhook Controller] Resultado:', result);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('[Webhook Controller] Erro:', error);
+    res.status(200).json({ status: 'error-logged' });
   }
+}
 
   @Post('store-redact')
   async storeRedact(@Req() req: Request, @Res() res: Response) {
