@@ -139,6 +139,7 @@ export class MercadoPagoService {
   async createCheckout(body: CreateCheckoutBody) {
     const { produtos, cliente, couponCode } = body;
 
+    // Validações iniciais
     if (!produtos || !produtos.length) {
       throw new BadRequestException('Invalid input: products empty');
     }
@@ -151,34 +152,42 @@ export class MercadoPagoService {
       );
     }
 
-     let shippingCost = 0;
-  let shippingOption: any = null;
-  
-  if (cliente.zipcode) {
-    try {
-      const shippingProducts = produtos.map(p => ({
-        id: p.idProduto,
-        quantity: p.quantity,
-        price: p.price ?? 0,
-        weight: 1.5, // Peso padrão de garrafa de vinho em kg
-      }));
+    // ========== CÁLCULO DE FRETE ==========
+    let shippingCost = 0;
+    let shippingOption: any = null;
+    
+    if (cliente.zipcode) {
+      try {
+        const shippingProducts = produtos.map(p => ({
+          id: p.idProduto,
+          quantity: p.quantity,
+          price: p.price ?? 0,
+          variant_id: p.variant_id, // IMPORTANTE: passa o variant_id
+        }));
 
-      shippingOption = await this.melhorEnvioService.getCheapestShipping(
-        cliente.zipcode,
-        shippingProducts,
-      );
-
-      if (shippingOption) {
-        shippingCost = parseFloat(shippingOption.price);
-        this.logger.log(
-          `Frete calculado: ${shippingOption.company.name} - R$ ${shippingCost}`,
+        // Usa getMostExpensiveShipping para pegar o frete MAIS CARO da Jadlog
+        shippingOption = await this.melhorEnvioService.getMostExpensiveShipping(
+          cliente.zipcode,
+          shippingProducts,
         );
-      }
-    } catch (err) {
-      this.logger.warn('Erro ao calcular frete, continuando sem frete:', err);
-    }
-  }
 
+        if (shippingOption) {
+          shippingCost = parseFloat(shippingOption.price);
+          this.logger.log(
+            `✅ Frete MAIS CARO calculado: ${shippingOption.company.name} - ${shippingOption.name} - R$ ${shippingCost} (${shippingOption.delivery_time} dias)`,
+          );
+        } else {
+          this.logger.warn('⚠️ Nenhuma opção de frete disponível');
+        }
+      } catch (err) {
+        this.logger.error('❌ Erro ao calcular frete:', err);
+        // Opcional: descomentar para bloquear checkout sem frete
+        // throw new BadRequestException('Não foi possível calcular o frete para este CEP');
+        this.logger.warn('⚠️ Continuando sem frete devido ao erro');
+      }
+    }
+
+    // ========== BUSCA DE PRODUTOS E VALIDAÇÃO ==========
     const uniqueProductIds = Array.from(
       new Set(produtos.map((p) => p.idProduto)),
     );
@@ -187,16 +196,17 @@ export class MercadoPagoService {
     await Promise.all(
       uniqueProductIds.map(async (prodId) => {
         const product = await this.fetchProduct(prodId);
-
         productsMap[prodId] = product;
       }),
     );
 
+    // Valida variantes e preços
     for (const p of produtos) {
       const product = productsMap[p.idProduto];
       if (!product) {
         throw new BadRequestException(`Produto inválido: ${p.idProduto}`);
       }
+      
       // Encontrar a variante dentro do produto
       const variant = (product.variants || []).find(
         (v: any) => Number(v.id) === Number(p.variant_id),
@@ -213,9 +223,12 @@ export class MercadoPagoService {
           `Preço inválido para variante ${p.variant_id} do produto ${p.idProduto}`,
         );
       }
+      
       p.price = priceNumber;
+      p.name = product.name?.pt || product.name || 'Produto';
     }
 
+    // ========== PREPARAÇÃO DE ENDEREÇO ==========
     const [firstName = 'Cliente', ...lastNameParts] = (
       cliente.name || 'Cliente Anônimo'
     ).split(' ');
@@ -233,6 +246,7 @@ export class MercadoPagoService {
       country: 'BR',
     };
 
+    // ========== CÁLCULO DE DESCONTO (CUPOM) ==========
     let discountAmount = 0;
     let coupon: Coupon | undefined;
     let note = '';
@@ -262,42 +276,52 @@ export class MercadoPagoService {
           discountAmount = this.round2(parseFloat(coupon.value));
         }
         note = `Cupom aplicado: ${coupon.code} (ID: ${coupon.id})`;
+        this.logger.log(`✅ Cupom aplicado: ${coupon.code} - Desconto: R$ ${discountAmount}`);
       } else {
         throw new BadRequestException('Cupom inválido.');
       }
     }
 
-   const calculatedTotal = this.round2(subtotal - discountAmount + shippingCost);
-  if (calculatedTotal <= 0) {
-    throw new BadRequestException('Total inválido após descontos');
-  }
+    // ========== CÁLCULO DO TOTAL ==========
+    const calculatedTotal = this.round2(subtotal - discountAmount + shippingCost);
+    if (calculatedTotal <= 0) {
+      throw new BadRequestException('Total inválido após descontos');
+    }
 
+    this.logger.log(`
+📊 RESUMO DO PEDIDO:
+- Subtotal: R$ ${subtotal}
+- Desconto: R$ ${discountAmount}
+- Frete: R$ ${shippingCost}
+- TOTAL: R$ ${calculatedTotal}
+    `);
+
+    // ========== CRIAÇÃO DO PEDIDO NA NUVEMSHOP ==========
     const orderPayload: CreateOrderPayload = {
-    customer: {
-      name: cliente.name || 'Cliente Anônimo',
-      email: cliente.email || 'sem-email@exemplo.com',
-      document: cliente.document || '00000000000',
-    },
-    products: produtos.map((p) => ({
-      variant_id: p.variant_id,
-      quantity: p.quantity || 1,
-      price: p.price!,
-    })),
-    billing_address: address,
-    shipping_address: address,
-    gateway: 'mercadopago',
-    shipping_pickup_type: 'ship',
-    shipping_cost_customer: shippingCost,
-    shipping: shippingOption 
-      ? `${shippingOption.company.name} - ${shippingOption.name}` 
-      : 'Não informado',
-    shipping_option: shippingOption 
-      ? `${shippingOption.delivery_time} dias úteis` 
-      : 'Não informado',
-    payment_status: 'pending',
-    note: note?.length > 0 ? note : undefined,
-  };
-
+      customer: {
+        name: cliente.name || 'Cliente Anônimo',
+        email: cliente.email || 'sem-email@exemplo.com',
+        document: cliente.document || '00000000000',
+      },
+      products: produtos.map((p) => ({
+        variant_id: p.variant_id,
+        quantity: p.quantity || 1,
+        price: p.price!,
+      })),
+      billing_address: address,
+      shipping_address: address,
+      gateway: 'mercadopago',
+      shipping_pickup_type: 'ship',
+      shipping_cost_customer: shippingCost,
+      shipping: shippingOption 
+        ? `${shippingOption.company.name} - ${shippingOption.name}` 
+        : 'Não informado',
+      shipping_option: shippingOption 
+        ? `${shippingOption.delivery_time} dias úteis` 
+        : 'Não informado',
+      payment_status: 'pending',
+      note: note?.length > 0 ? note : undefined,
+    };
 
     let nuvemOrder: any;
     let idNuvemShop: any;
@@ -309,12 +333,12 @@ export class MercadoPagoService {
         );
       }
       this.logger.log(
-        `[MP Service] Pedido ${nuvemOrder.id} criado como 'pending' na Nuvemshop.`,
+        `✅ [MP Service] Pedido ${nuvemOrder.id} criado como 'pending' na Nuvemshop.`,
       );
       idNuvemShop = nuvemOrder.id;
     } catch (err) {
       this.logger.error(
-        '[MP Service] Erro ao criar pedido na Nuvemshop:',
+        '❌ [MP Service] Erro ao criar pedido na Nuvemshop:',
         (err as any)?.response?.data || (err as Error).message,
       );
       throw new InternalServerErrorException(
@@ -322,29 +346,32 @@ export class MercadoPagoService {
       );
     }
 
+    // ========== CRIAÇÃO DA PREFERÊNCIA DO MERCADO PAGO ==========
     const preference = new Preference(this.mp);
- let items: Items[] = produtos.map((p) => ({
-    id: String(p.idProduto),
-    title: p.name ?? 'Produto',
-    quantity: p.quantity,
-    unit_price: this.round2(p.price ?? 0),
-    currency_id: 'BRL',
-  }));
-
-
-      if (discountAmount > 0) {
-    items = this.applyDiscountToItems(items, discountAmount);
-  }
-
-    if (shippingCost > 0 && shippingOption) {
-    items.push({
-      id: 'shipping',
-      title: `Frete - ${shippingOption.company.name}`,
-      quantity: 1,
-      unit_price: this.round2(shippingCost),
+    
+    let items: Items[] = produtos.map((p) => ({
+      id: String(p.idProduto),
+      title: p.name ?? 'Produto',
+      quantity: p.quantity,
+      unit_price: this.round2(p.price ?? 0),
       currency_id: 'BRL',
-    });
-  }
+    }));
+
+    // Aplica desconto proporcional aos itens
+    if (discountAmount > 0) {
+      items = this.applyDiscountToItems(items, discountAmount);
+    }
+
+    // Adiciona frete como item separado
+    if (shippingCost > 0 && shippingOption) {
+      items.push({
+        id: 'shipping',
+        title: `Frete - ${shippingOption.company.name}`,
+        quantity: 1,
+        unit_price: this.round2(shippingCost),
+        currency_id: 'BRL',
+      });
+    }
 
     const back_urls = {
       success: `${this.frontUrl}/sucesso/${nuvemOrder.id}`,
@@ -383,25 +410,25 @@ export class MercadoPagoService {
     }));
 
     const prefBody: PreferenceRequest = {
-    items,
-    back_urls,
-    auto_return: 'approved',
-    notification_url: `${this.backUrl}/webhooks/order-paid`,
-    external_reference: nuvemOrder.id.toString(),
-    metadata: {
-      produtos: metadataProdutos,
-      cliente: safeCliente,
-      total: calculatedTotal,
-      nuvem_order_id: nuvemOrder.id,
-      shipping_cost: shippingCost,
-      shipping_option: shippingOption ? {
-        service: shippingOption.name,
-        company: shippingOption.company.name,
-        delivery_time: shippingOption.delivery_time,
-      } : null,
-    },
-    ...(payer ? { payer } : {}),
-  };
+      items,
+      back_urls,
+      auto_return: 'approved',
+      notification_url: `${this.backUrl}/webhooks/order-paid`,
+      external_reference: nuvemOrder.id.toString(),
+      metadata: {
+        produtos: metadataProdutos,
+        cliente: safeCliente,
+        total: calculatedTotal,
+        nuvem_order_id: nuvemOrder.id,
+        shipping_cost: shippingCost,
+        shipping_option: shippingOption ? {
+          service: shippingOption.name,
+          company: shippingOption.company.name,
+          delivery_time: shippingOption.delivery_time,
+        } : null,
+      },
+      ...(payer ? { payer } : {}),
+    };
 
     try {
       const pref = await preference.create({ body: prefBody });
@@ -420,7 +447,7 @@ export class MercadoPagoService {
           }
         } catch (rollErr) {
           this.logger.error(
-            'Falha ao tentar cancelar pedido após erro de preferência:',
+            '❌ Falha ao tentar cancelar pedido após erro de preferência:',
             rollErr as any,
           );
         }
@@ -428,23 +455,26 @@ export class MercadoPagoService {
         throw new InternalServerErrorException('No init_point returned');
       }
 
+      this.logger.log(`✅ Preferência criada com sucesso! ID: ${(pref as any).id}`);
+
       return {
-    redirect_url: url,
-    preference_id: (pref as any).id,
-    mode: this.mode,
-    idNuvemShop,
-    shipping: shippingOption ? {
-      cost: shippingCost,
-      service: shippingOption.name,
-      company: shippingOption.company.name,
-      delivery_time: shippingOption.delivery_time,
-    } : null,
-  };
+        redirect_url: url,
+        preference_id: (pref as any).id,
+        mode: this.mode,
+        idNuvemShop,
+        shipping: shippingOption ? {
+          cost: shippingCost,
+          service: shippingOption.name,
+          company: shippingOption.company.name,
+          delivery_time: shippingOption.delivery_time,
+        } : null,
+      };
     } catch (err) {
       this.logger.error(
-        'Falha ao criar preferência MP:',
+        '❌ Falha ao criar preferência MP:',
         (err as any)?.response?.data || (err as Error).message,
       );
+      
       // rollback: tentar cancelar pedido criado na nuvemshop (melhor esforço)
       try {
         if ((this.nuvemshopService as any).cancelOrder) {
@@ -452,12 +482,12 @@ export class MercadoPagoService {
             reason: 'preference_failed',
           });
           this.logger.log(
-            `Pedido ${nuvemOrder.id} cancelado na Nuvemshop após falha na preferência.`,
+            `🔄 Pedido ${nuvemOrder.id} cancelado na Nuvemshop após falha na preferência.`,
           );
         }
       } catch (rollErr) {
         this.logger.error(
-          'Falha ao tentar cancelar pedido após erro de preferência:',
+          '❌ Falha ao tentar cancelar pedido após erro de preferência:',
           rollErr as any,
         );
       }
