@@ -409,7 +409,7 @@ export class MercadoPagoService {
       name: p.name ?? 'Produto',
     }));
 
-    const prefBody: PreferenceRequest = {
+   const prefBody: PreferenceRequest = {
       items,
       back_urls,
       auto_return: 'approved',
