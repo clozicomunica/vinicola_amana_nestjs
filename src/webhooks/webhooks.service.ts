@@ -17,7 +17,7 @@ import { Request } from 'express';
 @Injectable()
 export class WebhooksService {
   private readonly mp: MercadoPagoConfig;
-  private processedPayments = new Set<string>(); // Previne processamento duplicado
+  private processedPayments = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -45,15 +45,6 @@ export class WebhooksService {
   async handleOrderPaid(req: Request): Promise<any> {
     const query = req.query || {};
     const body = req.body || {};
-
-    console.log('========================================');
-    console.log('[MP Webhook] 🔔 NOVA NOTIFICAÇÃO RECEBIDA');
-    console.log('[MP Webhook] Tipo:', body?.type || body?.action);
-    console.log('[MP Webhook] Action:', body?.action);
-    console.log('[MP Webhook] Query completa:', JSON.stringify(query, null, 2));
-    console.log('[MP Webhook] Body completo:', JSON.stringify(body, null, 2));
-    console.log('========================================');
-
     // Extrai o payment ID de várias fontes possíveis
     let paymentId =
       query.id ||
@@ -61,8 +52,6 @@ export class WebhooksService {
       body?.data?.id ||
       body?.id ||
       body?.payment_id;
-
-    console.log('[MP Webhook] 🆔 Payment ID extraído:', paymentId);
 
     if (!paymentId) {
       console.warn('[MP Webhook] ⚠️ Payload sem payment ID. Ignorando.', {
@@ -75,7 +64,6 @@ export class WebhooksService {
     // Previne processamento duplicado
     const paymentKey = `${paymentId}-${Date.now()}`;
     if (this.processedPayments.has(paymentId)) {
-      console.log(`[MP Webhook] ⏭️ Pagamento ${paymentId} já processado. Ignorando.`);
       return { status: 'already-processed', payment_id: paymentId };
     }
 
@@ -84,9 +72,7 @@ export class WebhooksService {
     let payment;
 
     try {
-      console.log(`[MP Webhook] 🔍 Buscando detalhes do pagamento ${paymentId} no MP...`);
       payment = await paymentClient.get({ id: String(paymentId) });
-      console.log('[MP Webhook] ✅ Pagamento encontrado no MP');
     } catch (err) {
       console.error(
         '[MP Webhook] ❌ Falha ao buscar payment no MP:',
@@ -94,23 +80,7 @@ export class WebhooksService {
       );
       return { status: 'mp-fetch-error', error: err?.message };
     }
-
-    console.log('[MP Webhook] 📋 Detalhes do Pagamento:');
-    console.log('  - ID:', payment.id);
-    console.log('  - Status:', payment.status);
-    console.log('  - Status Detail:', payment.status_detail);
-    console.log('  - External Reference:', payment.external_reference);
-    console.log('  - Transaction Amount:', payment.transaction_amount);
-    console.log('  - Payment Method:', payment.payment_method_id);
-    console.log('  - Date Created:', payment.date_created);
-    console.log('  - Date Approved:', payment.date_approved);
-    console.log('  - Metadata:', JSON.stringify(payment.metadata, null, 2));
-
-    // ⚠️ CRÍTICO: Só processa pagamentos APROVADOS
     if (payment.status !== 'approved') {
-      console.log(
-        `[MP Webhook] ⏳ Pagamento ainda não aprovado. Status atual: "${payment.status}". Aguardando aprovação...`,
-      );
       return {
         status: 'waiting-approval',
         current_status: payment.status,
@@ -133,12 +103,6 @@ export class WebhooksService {
         payment_id: payment.id,
       };
     }
-
-    console.log(
-      `[MP Webhook] 🎯 Pedido identificado: Nuvemshop ID ${nuvemOrderId}`,
-    );
-    console.log(`[MP Webhook] 💳 Tentando atualizar pedido ${nuvemOrderId} para PAGO...`);
-
     try {
       // Marca como processado ANTES de atualizar
       this.processedPayments.add(paymentId);
@@ -147,15 +111,6 @@ export class WebhooksService {
       const updateResult = await this.nuvemshopService.updateOrderToPaid(
         nuvemOrderId,
       );
-
-      console.log('========================================');
-      console.log(
-        `[MP Webhook] ✅✅✅ SUCESSO! Pedido ${nuvemOrderId} atualizado para PAGO na Nuvemshop!`,
-      );
-      console.log('[MP Webhook] Resultado da atualização:', updateResult);
-      console.log('========================================');
-
-      // Limpa após 1 hora (previne memory leak)
       setTimeout(() => {
         this.processedPayments.delete(paymentId);
       }, 3600000);
@@ -201,7 +156,6 @@ export class WebhooksService {
     }
 
     const { store_id } = JSON.parse(rawBody);
-    console.log(`🧹 LGPD: Deletando dados da loja ${store_id}`);
   }
 
   async handleCustomersRedact(req: Request): Promise<void> {
@@ -214,10 +168,7 @@ export class WebhooksService {
       throw new UnauthorizedException('Assinatura inválida');
     }
 
-    const { store_id, customer, orders_to_redact } = JSON.parse(rawBody);
-    console.log(
-      `🧹 LGPD: Deletando dados do cliente ${customer?.id} da loja ${store_id}, pedidos: ${orders_to_redact}`,
-    );
+    
   }
 
   async handleCustomersDataRequest(req: Request): Promise<void> {
@@ -231,8 +182,6 @@ export class WebhooksService {
     }
 
     const { store_id, customer } = JSON.parse(rawBody);
-    console.log(
-      `📄 LGPD: Requisição de dados do cliente ${customer?.id} da loja ${store_id}`,
-    );
+    
   }
 }

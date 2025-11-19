@@ -1,3 +1,4 @@
+/* eslint-disable no-useless-catch */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
@@ -334,15 +335,11 @@ export class NuvemshopService {
     return response.data;
   }
  async updateOrderToPaid(orderId: string | number): Promise<any> {
-  try {
-    console.log('========================================');
-    console.log(`[NuvemShop] 🔄 Iniciando atualização do pedido ${orderId}...`);
-    
+  try {    
     // Primeiro, busca o pedido atual
     let currentOrder;
     try {
       currentOrder = await this.api.get(`/orders/${orderId}`);
-      console.log(`[NuvemShop] 📦 Pedido encontrado! Status atual: "${currentOrder.data.payment_status}"`);
     } catch (err: any) {
       console.error(`[NuvemShop] ❌ Erro ao buscar pedido ${orderId}:`, {
         status: err?.response?.status,
@@ -354,7 +351,6 @@ export class NuvemshopService {
     
     // Se já estiver pago, não faz nada
     if (currentOrder.data.payment_status === 'paid') {
-      console.log(`[NuvemShop] ✅ Pedido ${orderId} já está como PAID. Nada a fazer.`);
       return {
         ...currentOrder.data,
         already_paid: true,
@@ -366,26 +362,11 @@ export class NuvemshopService {
       payment_status: 'paid',
     };
     
-    console.log(`[NuvemShop] 📤 Enviando atualização para a Nuvemshop...`);
-    console.log(`[NuvemShop] Payload:`, JSON.stringify(payload, null, 2));
     
     const response = await this.api.put(`/orders/${orderId}`, payload);
-    
-    console.log(`[NuvemShop] ✅✅✅ Pedido ${orderId} atualizado com SUCESSO!`);
-    console.log(`[NuvemShop] Novo status: "${response.data.payment_status}"`);
-    console.log(`[NuvemShop] Resposta completa:`, JSON.stringify(response.data, null, 2));
-    console.log('========================================');
-    
+        
     return response.data;
   } catch (err: any) {
-    console.error('========================================');
-    console.error(`[NuvemShop] ❌❌❌ ERRO CRÍTICO ao atualizar pedido ${orderId}:`);
-    console.error('[NuvemShop] Status HTTP:', err?.response?.status);
-    console.error('[NuvemShop] Status Text:', err?.response?.statusText);
-    console.error('[NuvemShop] Erro da API:', JSON.stringify(err?.response?.data, null, 2));
-    console.error('[NuvemShop] Mensagem:', err?.message);
-    console.error('[NuvemShop] Headers da requisição:', err?.config?.headers);
-    console.error('========================================');
     throw err;
   }
 }

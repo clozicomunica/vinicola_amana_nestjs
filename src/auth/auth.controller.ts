@@ -44,10 +44,6 @@ export class AuthController {
       params,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-
-    console.log(data);
-    console.log(params);
-
     const tokenData = {
       store_id,
       access_token: data.access_token,

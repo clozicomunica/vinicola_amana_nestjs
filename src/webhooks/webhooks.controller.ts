@@ -19,36 +19,13 @@ export class WebhooksController {
   @Post('order-paid')
   async orderPaid(@Req() req: Request, @Res() res: Response) {
     try {
-      console.log('========================================');
-      console.log('🔔 [Webhook Controller] Nova requisição recebida do Mercado Pago');
-      console.log('[Webhook Controller] Timestamp:', new Date().toISOString());
-      console.log('[Webhook Controller] Method:', req.method);
-      console.log('[Webhook Controller] URL:', req.url);
-      console.log('[Webhook Controller] Headers:', JSON.stringify(req.headers, null, 2));
-      console.log('[Webhook Controller] Query:', JSON.stringify(req.query, null, 2));
-      console.log('[Webhook Controller] Body:', JSON.stringify(req.body, null, 2));
-      console.log('========================================');
-      
-      
       const result = await this.webhooksService.handleOrderPaid(req);
-      
-      console.log('✅ [Webhook Controller] Processamento concluído com sucesso');
-      console.log('[Webhook Controller] Resultado:', JSON.stringify(result, null, 2));
-      
-      
       res.status(200).json({ 
         success: true,
         message: 'Webhook processado com sucesso',
         result 
       });
     } catch (error: any) {
-      console.error('========================================');
-      console.error('❌ [Webhook Controller] ERRO ao processar webhook');
-      console.error('[Webhook Controller] Erro:', error);
-      console.error('[Webhook Controller] Stack:', error?.stack);
-      console.error('========================================');
-      
-      
       res.status(200).json({ 
         success: false,
         message: 'Erro processado e logado',

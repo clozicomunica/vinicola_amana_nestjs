@@ -42,8 +42,6 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-
-  console.log(`✅ Vinícola API is online at http://localhost:${port}/api`);
 }
 
 bootstrap().catch((error) => {
