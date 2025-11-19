@@ -91,8 +91,8 @@ export class WebhooksService {
 
     // Extrai o ID do pedido da Nuvemshop
     const nuvemOrderId =
-      payment.external_reference || payment.metadata?.nuvem_order_id;
-
+      payment.external_reference || payment.metadata?.nuvem_order_id || payment.data?.id;
+  console.log(nuvemOrderId);
     if (!nuvemOrderId) {
       console.warn(
         '[MP Webhook] ⚠️ Pagamento aprovado, mas sem external_reference (ID do pedido Nuvemshop).',

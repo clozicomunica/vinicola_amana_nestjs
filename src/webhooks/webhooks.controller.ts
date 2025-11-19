@@ -18,6 +18,8 @@ export class WebhooksController {
   
   @Post('order-paid')
   async orderPaid(@Req() req: Request, @Res() res: Response) {
+    console.log(req.body);
+    
     try {
       const result = await this.webhooksService.handleOrderPaid(req);
       res.status(200).json({ 
